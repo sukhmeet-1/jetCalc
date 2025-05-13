@@ -11,9 +11,11 @@ class GasMixture:
         self.gamma: float = -1.0
 
     def mixture_info(self):
-        print(
-            f"Mole Fraction Composition of {self._name} is {self._mole_fraction_composition}"
-        )
+
+        print(f"Mole Fraction Composition of {self._name} is:")
+
+        for k, v in self._mole_fraction_composition.items():
+            print(f"{k}: {v*100}%")
 
 
 if __name__ == "__main__":
