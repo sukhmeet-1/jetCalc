@@ -4,6 +4,7 @@ from cache.STANDARD_GAS_COMPOSITIONS import AIR
 from mixture import GasMixture
 
 # TODO parse polynomial coefficients for cp and cv calculation of mixture of gaseous species
+# TODO write a function for calculating cp and cv for a given input temperature
 
 
 def main():
