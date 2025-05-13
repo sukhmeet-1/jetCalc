@@ -1,6 +1,6 @@
 import yaml
 from cache.PATHS import COEFF_7_NASA_CP_DATA_PATH
-from cache.STANDARD_GAS_COMPOSITIONS import AIR
+from cache.STANDARD_GAS_COMPOSITIONS import STANDARD_AIR_COMPOSITION
 from mixture import GasMixture
 
 # TODO write a function for calculating cp and cv for a given input temperature
@@ -16,7 +16,7 @@ def main():
 
     # An example of how mixtures of gaseous species can be constructed
 
-    air = GasMixture("Standard Air", AIR)
+    air = GasMixture(name="Standard Air", mole_fraction_composition=STANDARD_AIR_COMPOSITION)
     air.mixture_info()
 
 

@@ -4,11 +4,11 @@ from cache.PATHS import COEFF_7_NASA_CP_DATA_PATH
 
 
 class GasMixture:
-    def __init__(self, name: str, mole_fraction_dict: Dict[str, float]):
+    def __init__(self, name: str, mole_fraction_composition: Dict[str: float]):
         self._name: str = name
-        self._species: Set[str] = set(mole_fraction_dict.keys())
-        self._mole_fraction_composition: Dict[str, float] = mole_fraction_dict
-        self._species_data: Dict[str, Dict] = self._load_constituent_species_data()
+        self._species: Set[str] = set(mole_fraction_composition.keys())
+        self._mole_fraction_composition: Dict[str: float] = mole_fraction_composition
+        self._species_data: Dict[str: Dict] = self._load_constituent_species_data()
         self.cp: float = -1.0
         self.cv: float = -1.0
         self.gamma: float = -1.0
