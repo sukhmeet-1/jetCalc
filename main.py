@@ -3,7 +3,6 @@ from cache.PATHS import COEFF_7_NASA_CP_DATA_PATH
 from cache.STANDARD_GAS_COMPOSITIONS import AIR
 from mixture import GasMixture
 
-# TODO parse polynomial coefficients for cp and cv calculation of mixture of gaseous species
 # TODO write a function for calculating cp and cv for a given input temperature
 
 
