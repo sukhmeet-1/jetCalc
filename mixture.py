@@ -1,7 +1,6 @@
 import math
 from typing import Dict, Set, List, Tuple
 import yaml
-from cache.PATHS import COEFF_7_NASA_CP_DATA_PATH as NASA_THERMO_DATA_YAML
 from cache.CONSTANTS import UNIVERSAL_GAS_CONSTANT_SI
 
 
@@ -10,7 +9,8 @@ class GasMixture:
         self,
         name: str,
         mole_fraction_composition: Dict[str, float],
-        least_admissible_mole_frac_error=1e-4,
+        thermo_data_yaml: Dict[str, Dict[str, Dict]],
+        least_admissible_mole_frac_error: float = 1e-4,
     ):
         """Create a GasMixture object to model the behaviour of mixture of ideal gas species. Stores the parsed data from NASA_THERMO_DATA_YAML,
         which includes valid temperature ranges and their respective 7 coefficients
@@ -19,6 +19,8 @@ class GasMixture:
             name (str): Name of the gas mixture
             mole_fraction_composition (Dict[str, float]): Dictionary of gas mixture composition where the key is the constituent species and
             the value is the mole fraction of species in the mixture
+            least_admissible_mole_frac_error (float): Error threshold to validate composition
+            thermo_data_yaml (Dict[str, Dict[str, Dict]]): User side pre-loaded dictionary of thermal data
         """
         # name of the mixture
         self._name: str = name
@@ -36,7 +38,7 @@ class GasMixture:
         self._species_data: Dict[str, Dict] = {}
 
         # Load the data from the NASA THERMO DATA YAML file
-        self._load_constituent_species_data()
+        self._load_constituent_species_data(thermo_data_yaml)
 
     @property
     def species(self):
@@ -52,16 +54,16 @@ class GasMixture:
     def get_species_mole_fraction(self, species: str):
         return self._mole_fraction_composition[species]
 
-    def _load_constituent_species_data(self):
-        """Opens the NASA THERMO DATA YAML file and stores the temperature range and
+    def _load_constituent_species_data(self, yaml_data: Dict[str, Dict[str, Dict]]):
+        """Stores the temperature range and
         coefficients in the self._species_data dictionary for each constituent species
 
-        Raises:
-            ValueError: In case of any species whose data is not availabe in NASA THERMO DATA YAML file
-        """
-        with open(NASA_THERMO_DATA_YAML, "r") as f:
-            yaml_data = yaml.safe_load(f)
+        Args:
+            yaml_data (Dict[str, Dict[str, Dict]]): User side pre-loaded dictionary of thermal data
 
+        Raises:
+            ValueError: In case of any species whose data is not availabe in yaml_data file
+        """
         species_map = {
             str(species["name"]).lower(): species["thermo"]
             for species in yaml_data["species"]

@@ -1,24 +1,20 @@
 import yaml
-from cache.PATHS import COEFF_7_NASA_CP_DATA_PATH
+from cache.PATHS import COEFF_7_NASA_CP_DATA_PATH as NASA_THERMAL_DATA
 from cache.STANDARD_GAS_COMPOSITIONS import STANDARD_AIR_COMPOSITION
 from mixture import GasMixture, GasMixtureThermoProperties
 
 
 def main():
-    with open(COEFF_7_NASA_CP_DATA_PATH, "r") as f:
-        data = yaml.safe_load(f)
-
-    print(
-        f"Thermodynamic Data available for {len(data['species'])} gaseous species, stored at {COEFF_7_NASA_CP_DATA_PATH}\n"
-    )
-
-    # An example of how mixtures of gaseous species can be constructed
+    with open(NASA_THERMAL_DATA, "r") as f:
+        nasa_gas_thermal_data = yaml.safe_load(f)
 
     air = GasMixture(
-        name="Standard Air", mole_fraction_composition=STANDARD_AIR_COMPOSITION
+        name="Standard Air",
+        mole_fraction_composition=STANDARD_AIR_COMPOSITION,
+        thermo_data_yaml=nasa_gas_thermal_data,
     )
-    airThermo = GasMixtureThermoProperties(gas_mixture=air, temperature_K=350)
-    print(airThermo)
+    airThermoProperties = GasMixtureThermoProperties(gas_mixture=air, temperature_K=350)
+    print(airThermoProperties)
 
 
 if __name__ == "__main__":
