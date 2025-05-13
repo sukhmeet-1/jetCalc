@@ -1,20 +1,21 @@
 import yaml
-from cache.PATHS import COEFF_7_NASA_CP_DATA_PATH as NASA_THERMAL_DATA
+from cache.PATHS import NASA_THERMAL_DATA_PATH
 from cache.STANDARD_GAS_COMPOSITIONS import STANDARD_AIR_COMPOSITION
-from mixture import GasMixture, GasMixtureThermoProperties
+from gas import GasMixture, GasState
+
+with open(NASA_THERMAL_DATA_PATH, "r") as f:
+    NASA_THERMAL_DATA = yaml.safe_load(f)
 
 
 def main():
-    with open(NASA_THERMAL_DATA, "r") as f:
-        nasa_gas_thermal_data = yaml.safe_load(f)
 
     air = GasMixture(
         name="Standard Air",
         mole_fraction_composition=STANDARD_AIR_COMPOSITION,
-        thermo_data_yaml=nasa_gas_thermal_data,
+        thermo_data_yaml=NASA_THERMAL_DATA,
     )
-    airThermoProperties = GasMixtureThermoProperties(gas_mixture=air, temperature_K=350)
-    print(airThermoProperties)
+    state = GasState(gas_mixture=air, temperature_K=298)
+    print(state)
 
 
 if __name__ == "__main__":

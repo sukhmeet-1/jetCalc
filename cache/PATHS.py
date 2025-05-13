@@ -12,6 +12,4 @@ DATA_PATH: str = os.path.join(PROJECT_ROOT_PATH, "data")
 DATA_NASA_PATH: str = os.path.join(DATA_PATH, "nasa")
 
 # Thermodynamic data file used for calculation of gas properties
-COEFF_7_NASA_CP_DATA_PATH: str = os.path.join(
-    DATA_NASA_PATH, "gas_specific_heat_coeffs_7.yaml"
-)
+NASA_THERMAL_DATA_PATH: str = os.path.join(DATA_NASA_PATH, "nasa_thermal_data.yaml")

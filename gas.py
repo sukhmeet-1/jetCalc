@@ -1,7 +1,7 @@
 import math
 from typing import Dict, Set, List, Tuple
-import yaml
-from cache.CONSTANTS import UNIVERSAL_GAS_CONSTANT_SI
+from periodictable.formulas import formula
+from cache.CONSTANTS import UNIVERSAL_GAS_CONSTANT_SI as R_SI
 
 
 class GasMixture:
@@ -23,38 +23,40 @@ class GasMixture:
             thermo_data_yaml (Dict[str, Dict[str, Dict]]): User side pre-loaded dictionary of thermal data
         """
         # name of the mixture
-        self._name: str = name
+        self.__name: str = name
 
         # set of all the species present in the mixture
-        self._species: Set[str] = set(mole_fraction_composition.keys())
+        self.__species: Set[str] = set(mole_fraction_composition.keys())
 
         # Constituent species mole fraction
-        self._mole_fraction_composition: Dict[str, float] = mole_fraction_composition
+        self.__mole_fraction_composition: Dict[str, float] = mole_fraction_composition
 
         # Ensure all the mole fractions add up to ~ 1
-        self._validate_molar_composition(least_admissible_mole_frac_error)
+        self.__validate_molar_composition(least_admissible_mole_frac_error)
 
         # Availabe temperature ranges and 7 coefficients stored for each species
-        self._species_data: Dict[str, Dict] = {}
+        self.__species_data: Dict[str, Dict] = {}
 
         # Load the data from the NASA THERMO DATA YAML file
-        self._load_constituent_species_data(thermo_data_yaml)
+        self.__load_constituent_species_data(thermo_data_yaml)
+
+    @property
+    def mole_fraction_composition(self):
+        return self.__mole_fraction_composition
 
     @property
     def species(self):
-        return self._species
+        return self.__species
 
     @property
     def name(self):
-        return self._name
+        return self.__name
 
-    def get_species_data(self, species: str):
-        return self._species_data[species]
+    @property
+    def species_data(self):
+        return self.__species_data
 
-    def get_species_mole_fraction(self, species: str):
-        return self._mole_fraction_composition[species]
-
-    def _load_constituent_species_data(self, yaml_data: Dict[str, Dict[str, Dict]]):
+    def __load_constituent_species_data(self, yaml_data: Dict[str, Dict[str, Dict]]):
         """Stores the temperature range and
         coefficients in the self._species_data dictionary for each constituent species
 
@@ -69,18 +71,22 @@ class GasMixture:
             for species in yaml_data["species"]
         }
 
-        for constituent_species in self._species:
+        for constituent_species in self.__species:
             key = constituent_species.lower()
             if key not in species_map:
                 raise ValueError(
-                    f"{self._name}: Invalid species: '{constituent_species}'"
+                    f"{self.__name}: Invalid species: '{constituent_species}'"
                 )
-            self._species_data[constituent_species] = species_map[key]
-            # Remove irrelevant fields safely
-            self._species_data[constituent_species].pop("model", None)
-            self._species_data[constituent_species].pop("note", None)
+            self.__species_data[constituent_species] = species_map[key]
+            self.__species_data[constituent_species]["molar-mass"] = (
+                (formula(constituent_species).molecular_mass) * 1e-3 * 6.022e23
+            )
 
-    def _validate_molar_composition(self, least_admissible_error: float):
+            # Remove irrelevant fields safely
+            self.__species_data[constituent_species].pop("model", None)
+            self.__species_data[constituent_species].pop("note", None)
+
+    def __validate_molar_composition(self, least_admissible_error: float):
         """Ensures all the mole fractions of the constituent species add up to 1 within permitted range of error
 
         Args:
@@ -89,21 +95,21 @@ class GasMixture:
         Raises:
             ValueError: If all the mole fractions do not add up to 1 within the least_admissible_error range.
         """
-        total = sum(self._mole_fraction_composition.values())
+        total = sum(self.__mole_fraction_composition.values())
         if not abs(total - 1.0) < least_admissible_error:
             raise ValueError(
-                f"{self._name}: Total mole fraction must sum to 1.0. Got: {total}"
+                f"{self.__name}: Total mole fraction must sum to 1.0. Got: {total}"
             )
 
     def __str__(self):
-        lines = [f"MOLE FRACTION COMPOSITION FOR '{self._name}':\n"]
+        lines = [f"MOLE FRACTION COMPOSITION FOR '{self.__name}':\n"]
 
-        for k, v in self._mole_fraction_composition.items():
+        for k, v in self.__mole_fraction_composition.items():
             lines.append(f"{k}: {v * 100:.6f} %")
 
-        lines.append(f"\nSPECIES DATA FOR '{self._name}':\n")
+        lines.append(f"\nSPECIES DATA FOR '{self.__name}':\n")
 
-        for k, v in self._species_data.items():
+        for k, v in self.__species_data.items():
             lines.append(f"'{k}'\n")
             lines.append(f"Temperature Ranges: {v['temperature-ranges']}")
             if len(v["temperature-ranges"]) == 3:
@@ -115,7 +121,7 @@ class GasMixture:
         return "\n".join(lines)
 
 
-class GasMixtureThermoProperties:
+class GasState:
     def __init__(self, gas_mixture: GasMixture, temperature_K: float = 298.0):
         """Stores all the derived thermodynamic data calculated from the stored coefficients in a Gas Mixture
 
@@ -125,30 +131,33 @@ class GasMixtureThermoProperties:
             Defaults to 298. (Standard Air Temperature).
         """
         # Gas mixture to be evaluated
-        self.gas_mixture: GasMixture = gas_mixture
+        self.__gas_mixture: GasMixture = gas_mixture
 
         # Gas temperature
-        self._temperature_K: float = temperature_K
+        self.__temperature_K: float = temperature_K
 
         # Isobaric molar specific heat
-        self._cp_SI: float = None
+        self.__cp_SI: float = None
 
         # Isochoric molar specific heat
-        self._cv_SI: float = None
+        self.__cv_SI: float = None
 
         # Molar enthalpy
-        self._enthalpy_SI: float = None
+        self.__enthalpy_SI: float = None
 
         # Molar entropy
-        self._entropy_SI: float = None
+        self.__entropy_SI: float = None
 
         # Ratio of specific heats
-        self._gamma: float = None
+        self.__gamma: float = None
+
+        # Molar mass of the mixture in kg
+        self.__mol_mass_kg: float = None
 
         # Calculates all the thermodynamic properties for a given temperature
-        self._calc_thermodynamic_properties()
+        self.__calc_thermodynamic_properties()
 
-    def _thermo_nasa_polynomials(
+    def __thermo_nasa_polynomials(
         self, coefficients: List[float]
     ) -> Tuple[float, float, float]:
         """NASA polynomial function which uses the 7 coefficients to calculate
@@ -160,7 +169,7 @@ class GasMixtureThermoProperties:
         Returns:
             Tuple[float, float, float]: (isobaric specific heat/R, enthalpy /RT, entropy/R)
         """
-        t = self._temperature_K
+        t = self.__temperature_K
         a1, a2, a3, a4, a5, a6, a7 = coefficients
         cp_R = a1 + a2 * t + a3 * t**2 + a4 * t**3 + a5 * t**4
         h_RT = (
@@ -182,7 +191,7 @@ class GasMixtureThermoProperties:
         )
         return cp_R, h_RT, s_R
 
-    def _calc_thermodynamic_properties(self):
+    def __calc_thermodynamic_properties(self):
         """Calculates isobaric specific heat, molar enthalpy and molar entropy for the gas mixture
 
         Raises:
@@ -191,98 +200,109 @@ class GasMixtureThermoProperties:
         cp_total = 0.0
         enthalpy_total = 0.0
         entropy_total = 0.0
-
-        gas_mixture_species = self.gas_mixture.species
+        molar_mass_total = 0.0
+        gas_mixture_species = self.__gas_mixture.species
 
         for species in gas_mixture_species:
-            species_data = self.gas_mixture.get_species_data(species)
+            species_data = self.__gas_mixture.species_data[species]
             temp_range = species_data["temperature-ranges"]
             coeff_array = species_data["data"]
+            species_mol_mass_kg = species_data["molar-mass"]
             temp_range_len = len(temp_range)
 
             if temp_range_len == 3:
                 t_lo, t_mid, t_hi = temp_range
 
-                if t_lo <= self._temperature_K < t_mid:
+                if t_lo <= self.__temperature_K < t_mid:
                     coeffs = coeff_array[0]
 
-                elif t_mid <= self._temperature_K <= t_hi:
+                elif t_mid <= self.__temperature_K <= t_hi:
                     coeffs = coeff_array[1]
 
                 else:
                     raise ValueError(
-                        f"[{species}] T={self.temperature_K}K not in range ({t_lo}-{t_hi})K"
+                        f"[{species}] T={self.__temperature_K}K not in range ({t_lo}-{t_hi})K"
                     )
 
             else:
                 t_lo, t_hi = temp_range
 
-                if t_lo <= self._temperature_K <= t_hi:
+                if t_lo <= self.__temperature_K <= t_hi:
                     coeffs = coeff_array[0]
                 else:
                     raise ValueError(
-                        f"[{species}] T={self.temperature_K}K not in range ({t_lo}-{t_hi})K"
+                        f"[{species}] T={self.__temperature_K}K not in range ({t_lo}-{t_hi})K"
                     )
 
-            cp_R, h_RT, s_R = self._thermo_nasa_polynomials(coeffs)
-            mole_frac = self.gas_mixture.get_species_mole_fraction(species)
+            cp_R, h_RT, s_R = self.__thermo_nasa_polynomials(coeffs)
+            mole_frac = self.__gas_mixture.mole_fraction_composition[species]
             cp = cp_R * mole_frac
             enthalpy = h_RT * mole_frac
             entropy = s_R * mole_frac
+            molar_mass = mole_frac * species_mol_mass_kg
 
             cp_total += cp
             enthalpy_total += enthalpy
             entropy_total += entropy
+            molar_mass_total += molar_mass
 
-        self._cp_SI = cp_total * UNIVERSAL_GAS_CONSTANT_SI
-        self._enthalpy_SI = (
-            enthalpy_total * UNIVERSAL_GAS_CONSTANT_SI * self._temperature_K
-        )
-        self._entropy_SI = entropy_total * UNIVERSAL_GAS_CONSTANT_SI
-        self._cv_SI = self._cp_SI - UNIVERSAL_GAS_CONSTANT_SI
-        self._gamma = self._cp_SI / self._cv_SI
+        self.__cp_SI = cp_total * R_SI
+        self.__enthalpy_SI = enthalpy_total * R_SI * self.__temperature_K
+        self.__entropy_SI = entropy_total * R_SI
+        self.__cv_SI = self.__cp_SI - R_SI
+        self.__gamma = self.__cp_SI / self.__cv_SI
+        self.__mol_mass_kg = molar_mass_total
 
-    def update_temperature(self, temperature_K: float):
+    def updateTemperature(self, temperature_K: float):
         """Update the gas temperature and recalculate the thermodynamic properties
 
         Args:
             temperature_K (float): Updated gas temperature
         """
-        self._temperature_K = temperature_K
-        self._calc_thermodynamic_properties()
+        self.__temperature_K = temperature_K
+        self.__calc_thermodynamic_properties()
+
+    def updateGasMixture(self, gas_mixture: GasMixture):
+        self.__gas_mixture = gas_mixture
+        self.__calc_thermodynamic_properties()
 
     @property
     def cp(self):
-        return self._cp_SI
+        return self.__cp_SI / self.molar_mass
 
     @property
     def cv(self):
-        return self._cv_SI
+        return self.__cv_SI / self.molar_mass
 
     @property
     def enthalpy(self):
-        return self._enthalpy_SI
+        return self.__enthalpy_SI / self.molar_mass
 
     @property
     def entropy(self):
-        return self._entropy_SI
+        return self.__entropy_SI / self.molar_mass
 
     @property
     def gamma(self):
-        return self._gamma
+        return self.__gamma
+
+    @property
+    def molar_mass(self):
+        return self.__mol_mass_kg
 
     @property
     def temperature(self):
-        return self._temperature_K
+        return self.__temperature_K
 
     def __str__(self):
-        lines = [self.gas_mixture.__str__()]
-        lines.append(f"\nTHERMODYNAMIC DATA FOR '{self.gas_mixture.name}':\n")
+        lines = [self.__gas_mixture.__str__()]
+        lines.append(f"\nTHERMODYNAMIC DATA FOR '{self.__gas_mixture.name}':\n")
+        lines.append(f"Molar Mass (kg): {self.molar_mass}")
         lines.append(f"Temperature (K): {self.temperature}")
-        lines.append(f"Isobaric molar specific heat  (J / mol K): {self.cp}")
-        lines.append(f"Isochoric molar specific heat (J / mol K): {self.cv}")
-        lines.append(f"Molar Enthalpy (J / mol): {self.enthalpy}")
-        lines.append(f"Molar Entropy (J / mol K): {self.entropy}")
+        lines.append(f"Isobaric specific heat  (J / kg K): {self.cp}")
+        lines.append(f"Isochoric specific heat (J / kg K): {self.cv}")
+        lines.append(f"Specific Enthalpy (J / kg): {self.enthalpy}")
+        lines.append(f"Specific Entropy (J / kg K): {self.entropy}")
         lines.append(f"Ratio of specific heats: {self.gamma}")
 
         return "\n".join(lines)
