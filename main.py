@@ -1,17 +1,24 @@
 import yaml
-from paths import *
+from cache.PATHS import COEFF_7_NASA_CP_DATA_PATH
+from cache.STANDARD_GAS_COMPOSITIONS import AIR
+from mixture import GasMixture
 
 # TODO parse polynomial coefficients for cp and cv calculation of mixture of gaseous species
 
 
-def main(species_name):
+def main():
     with open(COEFF_7_NASA_CP_DATA_PATH, "r") as f:
         data = yaml.safe_load(f)
 
-    print(f"cp / R polynomial coefficients available for the following species:")
-    for species in data["species"]:
-        print(species["name"])
+    print(
+        f"Thermodynamic Data available for {len(data['species'])} gaseous species, stored at {COEFF_7_NASA_CP_DATA_PATH}"
+    )
+
+    # An example of how mixtures of gaseous species can be constructed
+
+    air = GasMixture("Standard Air", AIR)
+    air.mixture_info()
 
 
 if __name__ == "__main__":
-    main("CO2")
+    main()
