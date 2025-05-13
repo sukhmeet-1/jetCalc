@@ -17,8 +17,8 @@ def main():
     air = GasMixture(
         name="Standard Air", mole_fraction_composition=STANDARD_AIR_COMPOSITION
     )
-    airThermo = GasMixtureThermoProperties(gas_mixture=air, temperature_K=400)
-    airThermo.info()
+    airThermo = GasMixtureThermoProperties(gas_mixture=air, temperature_K=350)
+    print(airThermo)
 
 
 if __name__ == "__main__":
