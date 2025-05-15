@@ -3,6 +3,7 @@ from typing import Dict, Set, List, Tuple
 from thermodynamics.phase import GasMixture
 from cache.CONSTANTS import UNIVERSAL_GAS_CONSTANT_SI as R_SI
 
+
 class GasState:
     def __init__(
         self,
@@ -12,6 +13,18 @@ class GasState:
         pressure_Pa: float = None,
         temperature_K: float = None,
     ):
+        """GasState is an abstraction of a thermodynamic state of a gas mixture.
+        Only 3 of the 4 state variables: Mass, Volume, Pressure, Temperature need to be provided to
+        completely define the state.
+        However, if all 4 are provided, they are validated using the equation of state, failing which a ValueError is raised
+
+        Args:
+            gas_mixture (GasMixture): Contains the thermal data of the mixture species
+            mass_kg (float, optional): Mass of the gas mixture. Defaults to None.
+            volume_SI (float, optional): Volume of the gas mixture. Defaults to None.
+            pressure_Pa (float, optional): Pressure of the gas mixture. Defaults to None.
+            temperature_K (float, optional): Temperature of the gas. Defaults to None.
+        """
         # Gas mixture to be evaluated
         self.__gas_mixture: GasMixture = gas_mixture
 
@@ -31,6 +44,7 @@ class GasState:
 
         self.__calc_molar_mass()
 
+        # Specfic gas constant of the gas species
         self.__R_spec = R_SI / self.__mol_mass_kg
 
         self.__eqn_of_state()
@@ -56,7 +70,7 @@ class GasState:
         self.__calc_thermodynamic_properties()
 
     def __calc_molar_mass(self):
-        """_summary_"""
+        """Calculates molar mass of the entire mixture"""
         molar_mass_total = 0.0
         for species, mole_frac in self.__gas_mixture.mole_fraction_composition.items():
             species_data = self.__gas_mixture.species_data[species]
@@ -67,7 +81,11 @@ class GasState:
         self.__mol_mass_kg = molar_mass_total
 
     def __eqn_of_state(self):
-        """_summary_"""
+        """Equation of state `Pressure * Volume = mass * specific gas constant * temperature`
+
+        Raises:
+            ValueError: If out of 4 state variables mass, pressure, volume, temperature, 3 are not provided.
+        """
         # Pressure is unknown
         if (
             self.__pressure_Pa is None
@@ -122,6 +140,14 @@ class GasState:
             )
 
     def __validate_eqn_of_state(self, admissible_error: float = 1e-6):
+        """Validate if all the state variables are actually valid
+
+        Args:
+            admissible_error (float, optional): Maximum admissible error between the lhs and rhs of equation of state.. Defaults to 1e-6.
+
+        Raises:
+            ValueError: If state variables, mass, volume, pressure and temperature are not valid
+        """
         difference = (self.__pressure_Pa * self.__volume_SI) - (
             self.__mass_kg * self.__R_spec * self.__temperature_K
         )
@@ -135,13 +161,13 @@ class GasState:
     def __thermo_nasa_polynomials(
         self, coefficients: List[float]
     ) -> Tuple[float, float, float]:
-        """_summary_
+        """NASA polynomials for the thermodynamic quantities of the species.
 
         Args:
-            coefficients (List[float]): _description_
+            coefficients (List[float]): 7 NASA coefficicents of the species in a specified temperature range
 
         Returns:
-            Tuple[float, float, float]: _description_
+            (float, float, float): cp / R, h / RT, s / R
         """
         t = self.__temperature_K
         a1, a2, a3, a4, a5, a6, a7 = coefficients
@@ -166,11 +192,10 @@ class GasState:
         return cp_R, h_RT, s_R
 
     def __calc_thermodynamic_properties(self):
-        """_summary_
+        """Calculates all the relevant thermodynamic properties of the gas mixture
 
         Raises:
-            ValueError: _description_
-            ValueError: _description_
+            ValueError: If the temperature of the state lies beyond the scope of the temperature ranges in the parsed yaml file
         """
         cp_total = 0.0
         enthalpy_total = 0.0
@@ -224,6 +249,13 @@ class GasState:
         self.__gamma = self.__cp_SI / self.__cv_SI
 
     def update_P_V_T(self, pressure_Pa: float, volume_SI: float, temperature_K: float):
+        """Updates Pressure, Volume and Temperature of the state
+
+        Args:
+            pressure_Pa (float): Pressure in Pascal
+            volume_SI (float): Volume in cubic meters
+            temperature_K (float): Temperature in Kelvin
+        """
         self.__mass_kg = None
         self.__pressure_Pa = pressure_Pa
         self.__volume_SI = volume_SI
@@ -233,6 +265,13 @@ class GasState:
         self.__calc_thermodynamic_properties()
 
     def update_P_m_T(self, pressure_Pa: float, mass_kg: float, temperature_K: float):
+        """Updates Pressure, Mass and Temperature of the state
+
+        Args:
+            pressure_Pa (float): Pressure in Pascal
+            mass_kg (float): Mass of the gas mixture in kilograms
+            temperature_K (float): Temperature in Kelvin
+        """
         self.__volume_SI = None
         self.__pressure_Pa = pressure_Pa
         self.__mass_kg = mass_kg
@@ -242,6 +281,13 @@ class GasState:
         self.__calc_thermodynamic_properties()
 
     def update_V_m_T(self, volume_SI: float, mass_kg: float, temperature_K: float):
+        """Updates Volume, Mass and Temperature of the state
+
+        Args:
+            volume_SI (float): Volume in cubic meters
+            mass_kg (float): Mass of the gas mixture in kilograms
+            temperature_K (float): Temperature in Kelvin
+        """
         self.__pressure_Pa = None
         self.__mass_kg = mass_kg
         self.__volume_SI = volume_SI
@@ -251,6 +297,13 @@ class GasState:
         self.__calc_thermodynamic_properties()
 
     def update_P_V_m(self, pressure_Pa: float, volume_SI: float, mass_kg: float):
+        """Updates Pressure, Volume and Mass of the state
+
+        Args:
+            pressure_Pa (float): Pressure in Pascal
+            volume_SI (float): Volume in cubic meters
+            mass_kg (float): Mass of the gas mixture in kilograms
+        """
         self.__temperature_K = None
         self.__pressure_Pa = pressure_Pa
         self.__volume_SI = volume_SI
@@ -310,7 +363,7 @@ class GasState:
     @property
     def temperature(self) -> float:
         return self.__temperature_K
-    
+
     @property
     def gas_mixture(self) -> GasMixture:
         return self.__gas_mixture
