@@ -1,4 +1,3 @@
-import math
 from typing import Literal, Dict
 from thermodynamics.state import GasState
 

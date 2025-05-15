@@ -1,6 +1,6 @@
 import math
 from typing import Dict, Set, List, Tuple
-from thermodynamics.gas import GasMixture
+from thermodynamics.phase import GasMixture
 from cache.CONSTANTS import UNIVERSAL_GAS_CONSTANT_SI as R_SI
 
 class GasState:

@@ -1,7 +1,7 @@
 import yaml
 from cache.PATHS import NASA_THERMAL_DATA_PATH
 from cache.STANDARD_GAS_COMPOSITIONS import STANDARD_AIR_COMPOSITION
-from thermodynamics.gas import GasMixture
+from thermodynamics.phase import GasMixture
 from thermodynamics.state import GasState
 from thermodynamics.process import GasProcess
 
