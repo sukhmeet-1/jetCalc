@@ -1,4 +1,4 @@
-from typing import Dict, Set
+from typing import Dict, Set, List, Any
 from periodictable.formulas import formula
 from cache.CONSTANTS import AVOGADRO_NUM as AVOG_N
 
@@ -8,7 +8,7 @@ class GasMixture:
         self,
         name: str,
         mole_fraction_composition: Dict[str, float],
-        thermo_data_yaml: Dict[str, Dict[str, Dict]],
+        thermo_data_yaml: Dict[str, Any],
         admissible_mole_frac_error: float = 1e-4,
     ):
         """Initializes a mixture of gaseous species by reading thermodynamic data from a yaml file.
@@ -16,7 +16,7 @@ class GasMixture:
         Args:
             name (str): Name of the mixture
             mole_fraction_composition (Dict[str, float]): Dictionary of constituent gaseous species and their respective mole fractions
-            thermo_data_yaml (Dict[str, Dict[str, Dict]]): Thermal data loaded from a yaml file already parsed on the user side
+            thermo_data_yaml (Dict[str, Any]): Thermal data loaded from a yaml file already parsed on the user side
             admissible_mole_frac_error (float, optional): Maximum error in mole fraction composition (making sure all species mole fractions add up to 1). Defaults to 1e-4.
         """
         # name of the mixture
@@ -32,22 +32,22 @@ class GasMixture:
         self.__validate_molar_composition(admissible_mole_frac_error)
 
         # Availabe temperature ranges and 7 coefficients stored for each species
-        self.__species_data: Dict[str, Dict] = {}
+        self.__species_data: Dict[str, Any] = {}
 
         # Load the parsed species data
         self.__load_constituent_species_data(thermo_data_yaml)
 
-    def __load_constituent_species_data(self, yaml_data: Dict[str, Dict[str, Dict]]):
+    def __load_constituent_species_data(self, yaml_data: Dict[str, Any]):
         """Loads the thermal data for each of the constituent species of the gas mixture. Data includes valid temperature range and the respective 7 NASA thermal coefficients.
 
         Args:
-            yaml_data (Dict[str, Dict[str, Dict]]): Thermal data from the yaml file parsed on the user side
+            yaml_data (Dict[str, Any]): Thermal data from the yaml file parsed on the user side
 
         Raises:
-            ValueError: If the gas mixture has a constituent species which is either unavailable or is tagged by a different name in the yaml file
+            ValueError: If the gas mixture has a constituent species which is either unavailable or is tagged by a different name in the yaml data
         """
         # For checking if the all constituent species are available in the file
-        species_map: Dict[str, Dict] = {
+        species_map: Dict[str, Any] = {
             str(species["name"]).lower(): species["thermo"]
             for species in yaml_data["species"]
         }
@@ -70,13 +70,13 @@ class GasMixture:
             self.__species_data[constituent_species].pop("note", None)
 
     def __validate_molar_composition(self, admissible_error: float):
-        """Validates if all the mass fractions of the constituent species add up to 1
+        """Validates if all the mole fractions of the constituent species add up to 1
 
         Args:
             admissible_error (float): Maximum allowed error in the difference between the actual sum of mole fractions and 1
 
         Raises:
-            ValueError: If the sum of all the mole fracions of the constituent species do not add up to 1 within the admissible error range
+            ValueError: If the sum of all the mole fractions of the constituent species do not add up to 1 within the admissible error range
         """
         total: float = sum(self.__mole_fraction_composition.values())
         if not abs(total - 1.0) < admissible_error:
@@ -97,11 +97,13 @@ class GasMixture:
         return self.__name
 
     @property
-    def species_data(self) -> Dict[str, Dict]:
+    def species_data(
+        self,
+    ) -> Dict[str, Any]:
         return self.__species_data
 
-    def __str__(self):
-        lines = [f"MOLE FRACTION COMPOSITION FOR '{self.__name}':\n"]
+    def __str__(self) -> str:
+        lines: List[str] = [f"MOLE FRACTION COMPOSITION FOR '{self.__name}':\n"]
 
         for k, v in self.__mole_fraction_composition.items():
             lines.append(f"{k}: {v * 100:.6f} %")
