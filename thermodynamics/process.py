@@ -1,10 +1,10 @@
 from enum import Enum
-from typing import Optional, TypedDict
+from typing import Optional, TypedDict, Dict, Set, Literal
 from thermodynamics.state import GasState
 
 
 class GasProcessType(Enum):
-    ADIABATIC = 0
+    ISENTROPIC = 0
     ISOTHERMAL = 1
     ISOCHORIC = 2
     ISOBARIC = 3
@@ -34,7 +34,8 @@ def process_constraint(
 
     if num_none != 2:
         raise ValueError(
-            "Exactly 2 of the four state variables: Pressure, Volume, Mass and Temperature, should be constrained"
+            "Exactly 2 of the four state variables: Pressure, Volume, Mass and Temperature, should be constrained. "
+            "Except for special isentropic case, where, to constrain pressure and temperature, there should be one additional constraint on either mass or volume "
         )
     return constraint
 
@@ -58,14 +59,14 @@ class GasProcess:
             self.__final_state_constraints: GasProcessConstraint = (
                 final_state_constraints
             )
-            self.__calc_final_state()
+            self.__calc_final_ideal_state()
 
-    def __calc_final_state(self):
-        allowed_constraints = {
+    def __validate_constraints(self):
+        allowed_constraints: Dict[GasProcessType, Set[str]] = {
             GasProcessType.ISOBARIC: {"temperature", "volume", "mass"},
             GasProcessType.ISOCHORIC: {"pressure", "temperature", "mass"},
             GasProcessType.ISOTHERMAL: {"pressure", "volume", "mass"},
-            GasProcessType.ADIABATIC: {"pressure", "volume", "temperature", "mass"},
+            GasProcessType.ISENTROPIC: {"pressure", "volume", "temperature", "mass"},
         }
 
         provided_constraints = {
@@ -78,6 +79,9 @@ class GasProcess:
                 f"{self.__process_type.name.capitalize()} process does not allow constraints on: "
                 f"{', '.join(invalid)}"
             )
+
+    def __calc_final_ideal_state(self):
+        self.__validate_constraints()
         P1 = self.__initial_state.pressure
         V1 = self.__initial_state.volume
         M1 = self.__initial_state.mass
@@ -97,8 +101,8 @@ class GasProcess:
         elif self.__process_type == GasProcessType.ISOTHERMAL:
             T2 = T1
             P2, M2, V2 = self.__isothermal_final_state(P1, M1, V1, P2, M2, V2)
-        elif self.__process_type == GasProcessType.ADIABATIC:
-            P2, V2, M2, T2 = self.__adiabatic_final_state(
+        elif self.__process_type == GasProcessType.ISENTROPIC:
+            P2, V2, M2, T2 = self.__isentropic_final_state(
                 P1,
                 M1,
                 V1,
@@ -122,28 +126,38 @@ class GasProcess:
         M2: Optional[float],
         T2: Optional[float],
     ):
-        if V2 is not None and M2 is not None:
-            if M2 == 0 or V1 == 0:
-                raise ValueError(
-                    "For valid final state temperature calculation, final mass or initial volume cannot be 0"
-                )
-            T2: float = (M1 / M2) * T1 * (V2 / V1)
-        elif V2 is not None and T2 is not None:
-            if V1 == 0 or T2 == 0:
-                raise ValueError(
-                    "For valid final state mass calculation, final temperature or initial volume cannot be 0"
-                )
-            M2: float = (V2 / V1) * M1 * (T1 / T2)
-        elif T2 is not None and M2 is not None:
-            if M1 == 0 or T1 == 0:
-                raise ValueError(
-                    "For valid final state volume calculation, initial mass or initial temperature cannot be 0"
-                )
-            V2: float = (M2 / M1) * V1 * (T2 / T1)
-        else:
+        if len([none_val for none_val in [V2, M2, T2] if none_val is None]) != 1:
             raise ValueError(
-                "Isobaric process can only constrain any 2 of Temperature, Volume and Mass."
+                f"Final state information: Volume = {V2}, Mass = {M2}, Temperature = {T2}, is not appropriate for the calculation of the final isobaric state. There should be only 1 unknown variable"
             )
+
+        def __T_relation():
+            if M2 == 0 or V1 == 0 or M2 is None or V1 is None:
+                raise ValueError(
+                    f"For valid final state temperature calculation, final mass = {M2} or initial volume = {V1} cannot be 0"
+                )
+            return (M1 / M2) * T1 * (V2 / V1)
+
+        def __M_relation():
+            if V1 == 0 or T2 == 0 or V1 is None or T2 is None:
+                raise ValueError(
+                    f"For valid final state mass calculation, final temperature = {T2} or initial volume = {V1} cannot be 0"
+                )
+            return (V2 / V1) * M1 * (T1 / T2)
+
+        def __V_relation():
+            if M1 == 0 or T1 == 0 or M1 is None or T1 is None:
+                raise ValueError(
+                    f"For valid final state volume calculation, initial mass = {M1} or initial temperature = {T1} cannot be 0"
+                )
+            return (M2 / M1) * V1 * (T2 / T1)
+
+        if T2 is None:
+            T2: float = __T_relation()
+        elif M2 is None:
+            M2: float = __M_relation()
+        elif V2 is None:
+            V2: float = __V_relation()
 
         return V2, M2, T2
 
@@ -156,28 +170,38 @@ class GasProcess:
         M2: Optional[float],
         T2: Optional[float],
     ):
-        if P2 is not None and M2 is not None:
-            if M2 == 0 or P1 == 0:
-                raise ValueError(
-                    "For valid final state temperature calculation, final mass or initial pressure cannot be 0"
-                )
-            T2: float = (M1 / M2) * T1 * (P2 / P1)
-        elif P2 is not None and T2 is not None:
-            if T2 == 0 or P1 == 0:
-                raise ValueError(
-                    "For valid final state mass calculation, final temperature or initial pressure cannot be 0"
-                )
-            M2: float = (P2 / P1) * M1 * (T1 / T2)
-        elif T2 is not None and M2 is not None:
-            if M1 == 0 or T1 == 0:
-                raise ValueError(
-                    "For valid final state pressure calculation, initial mass or initial temperature cannot be 0"
-                )
-            P2: float = (M2 / M1) * P1 * (T2 / T1)
-        else:
+        if len([none_val for none_val in [P2, M2, T2] if none_val is None]) != 1:
             raise ValueError(
-                "Isochoric process can only constrain any 2 of Pressure, Temperature and Mass."
+                f"Final state information: Pressure = {P2}, Mass = {M2}, Temperature = {T2}, is not appropriate for the calculation of the final isochoric state. There should be only 1 unknown variable"
             )
+
+        def __T_relation():
+            if M2 == 0 or P1 == 0 or M2 is None or P1 is None:
+                raise ValueError(
+                    f"For valid final state temperature calculation, final mass = {M2} or initial pressure = {P1} cannot be 0"
+                )
+            return (M1 / M2) * T1 * (P2 / P1)
+
+        def __M_relation():
+            if T2 == 0 or P1 == 0 or T2 is None or P1 is None:
+                raise ValueError(
+                    f"For valid final state mass calculation, final temperature = {T2} or initial pressure = {P1} cannot be 0"
+                )
+            return (P2 / P1) * M1 * (T1 / T2)
+
+        def __P_relation():
+            if M1 == 0 or T1 == 0 or M1 is None or T1 is None:
+                raise ValueError(
+                    f"For valid final state pressure calculation, initial mass = {M1} or initial temperature = {T1} cannot be 0"
+                )
+            return (M2 / M1) * P1 * (T2 / T1)
+
+        if T2 is None:
+            T2: float = __T_relation()
+        elif M2 is None:
+            M2: float = __M_relation()
+        elif P2 is None:
+            P2: float = __P_relation()
 
         return P2, M2, T2
 
@@ -190,32 +214,41 @@ class GasProcess:
         M2: Optional[float],
         V2: Optional[float],
     ):
-        if P2 is not None and V2 is not None:
-            if P1 == 0 or V1 == 0:
-                raise ValueError(
-                    "For valid final state mass calculation, initial pressure or initial volume cannot be 0"
-                )
-            M2: float = (V2 / V1) * M1 * (P2 / P1)
-        elif P2 is not None and M2 is not None:
-            if P2 == 0 or M1 == 0:
-                raise ValueError(
-                    "For valid final state volume calculation, final pressure or initial mass cannot be 0"
-                )
-            V2: float = (P1 / P2) * V1 * (M2 / M1)
-        elif V2 is not None and M2 is not None:
-            if V2 == 0 or M1 == 0:
-                raise ValueError(
-                    "For valid final state pressure calculation, final volume or initial mass cannot be 0"
-                )
-            P2: float = (V1 / V2) * P1 * (M2 / M1)
-        else:
+        if len([none_val for none_val in [P2, M2, V2] if none_val is None]) != 1:
             raise ValueError(
-                "Isothermal process can only constrain any 2 of Pressure, Volume and Mass."
+                f"Final state information: Pressure = {P2}, Mass = {M2}, Volume = {V2}, is not appropriate for the calculation of the final isothermal state. There should be only 1 unknown variable"
             )
 
+        def __M_relation():
+            if P1 == 0 or V1 == 0 or P1 is None or V1 is None:
+                raise ValueError(
+                    f"For valid final state mass calculation, initial pressure = {P1} or initial volume = {V1} cannot be 0"
+                )
+            return (V2 / V1) * M1 * (P2 / P1)
+
+        def __V_relation():
+            if P2 == 0 or M1 == 0 or P2 is None or M1 is None:
+                raise ValueError(
+                    f"For valid final state volume calculation, final pressure = {P2} or initial mass = {M1} cannot be 0"
+                )
+            return (P1 / P2) * V1 * (M2 / M1)
+
+        def __P_relation():
+            if V2 == 0 or M1 == 0 or V2 is None or M1 is None:
+                raise ValueError(
+                    f"For valid final state pressure calculation, final volume = {V2} or initial mass = {M1} cannot be 0"
+                )
+            return (V1 / V2) * P1 * (M2 / M1)
+
+        if M2 is None:
+            M2: float = __M_relation()
+        elif V2 is None:
+            V2: float = __V_relation()
+        elif P2 is None:
+            P2: float = __P_relation()
         return P2, M2, V2
 
-    def __adiabatic_final_state(
+    def __isentropic_final_state(
         self,
         P1: float,
         M1: float,
@@ -227,62 +260,99 @@ class GasProcess:
         T2: Optional[float],
     ):
         y = self.__initial_state.gamma
-        if y == 0 or y < 0:
+        if y <= 0:
             raise ValueError(
-                "For an adiabatic process, gamma must have a positive non-zero value"
+                f"For an isentropic process, gamma = {y} must be a positive non-zero value"
             )
-        if P2 is not None and M2 is not None:
-            if P2 == 0:
+        if len([none_val for none_val in [P2, M2, V2, T2] if none_val is None]) not in [
+            2,
+            3,
+        ]:
+            raise ValueError(
+                f"Final state information: Pressure = {P2}, Mass = {M2}, Volume = {V2}, Temperature = {T2},"
+                " is not appropriate for the calculation of the final isentropic state. "
+                "There should be only 2 constraints except for a special isentropic case, where, to constrain pressure and temperature, "
+                "there should be one additional constraint on either mass or volume"
+            )
+
+        def __V_M_P_relation():
+            if P2 == 0 or P2 is None or M1 == 0 or M1 is None:
                 raise ValueError(
-                    "For valid final state volume calculation, final pressure cannot be 0"
+                    f"For valid final state volume calculation, final pressure = {P2} or initial mass = {M1} cannot be 0"
                 )
-            V2 = ((P1 / P2) ** (1 / y)) * V1
-            if M2 == 0 or V2 == 0:
+            return ((P1 / P2) ** (1 / y)) * (M2 / M1) * V1
+
+        def __T_V_M_relation():
+            if V2 == 0 or V2 is None or M1 == 0 or M1 is None:
                 raise ValueError(
-                    "For valid final state temperature calculation, final mass or final volume cannot be 0"
+                    f"For valid final state temperature calculation, final volume = {V2} or initial mass = {M1} cannot be 0"
                 )
-            T2 = (M1 / M2) * T1 * (V1 / V2) ** (y - 1)
-        elif P2 is not None and T2 is not None:
-            if P2 == 0:
+            return T1 * ((V1 / V2) ** (y - 1)) * ((M2 / M1) ** (y - 1))
+
+        def __M_P_V_relation():
+            if P1 == 0 or P1 is None or V1 == 0 or V1 is None:
                 raise ValueError(
-                    "For valid final state volume calculation, final pressure cannot be 0"
+                    f"For valid final state mass calculation, initial pressure = {P1} or initial volume = {V1} cannot be 0"
                 )
-            V2 = ((P1 / P2) ** (1 / y)) * V1
-            if T2 == 0 or V2 == 0:
+            return ((P2 / P1) ** (1 / y)) * (V2 / V1) * M1
+
+        def __P_M_V_relation():
+            if M1 == 0 or M1 is None or V2 == 0 or V2 is None:
                 raise ValueError(
-                    "For valid final state mass calculation, final temperature or final volume cannot be 0"
+                    f"For valid final state pressure calculation, initial mass = {M1} or final volume = {V2} cannot be 0"
                 )
-            M2 = (T1 / T2) * M1 * ((V1 / V2) ** (y - 1))
-        elif M2 is not None and T2 is not None:
-            if M2 == 0 or T2 == 0:
+            return ((M2 / M1) ** y) * ((V1 / V2) ** y) * P1
+
+        def __M_V_T_relation():
+            if V1 == 0 or V1 is None or T1 == 0 or T1 is None:
                 raise ValueError(
-                    "For valid final state volume calculation, final mass or initial temperature cannot be 0"
+                    f"For valid final state mass calculation, initial volume = {V1} or initial temperature = {T1} cannot be 0"
                 )
-            V2 = (M1 / M2) * (T1 / T2) * (V1 ** (y - 1))
-            if V2 == 0:
+            return (V2 / V1) * ((T2 / T1) ** (1 / (y - 1))) * M1
+
+        def __V_T_M_relation():
+            if T2 == 0 or T2 is None or M1 == 0 or M1 is None:
                 raise ValueError(
-                    "For valid final state pressure calculation, final volume cannot be 0"
+                    f"For valid final state volume calculation, final temperature = {T2} or initial mass = {M1} cannot be 0"
                 )
-            P2 = P1 * ((V1 / V2) ** y)
-        elif M2 is not None and V2 is not None:
-            if V2 == 0:
-                raise ValueError(
-                    "For valid final state pressure calculation, final volume cannot be 0"
-                )
-            P2 = ((V1 / V2) ** y) * P1
-            if M2 == 0 or V2 == 0:
-                raise ValueError(
-                    "For valid final state temperature calculation, final mass or final volume cannot be 0"
-                )
-            T2 = (M1 / M2) * T1 * ((V1 / V2) ** (y - 1))
+            return (T1 / T2) ** (1 / (y - 1)) * (M2 / M1) * V1
+
+        if V2 is None and T2 is None and P2 is not None and M2 is not None:
+            V2 = __V_M_P_relation()
+            T2 = __T_V_M_relation()
+        elif M2 is None and T2 in None and P2 is not None and V2 is not None:
+            M2 = __M_P_V_relation()
+            T2 = __T_V_M_relation()
+        elif P2 is None and T2 is None and M2 is not None and V2 is not None:
+            P2 = __P_M_V_relation()
+            T2 = __T_V_M_relation()
+        elif M2 is None and P2 is None and V2 is not None and T2 is not None:
+            M2 = __M_V_T_relation()
+            P2 = __P_M_V_relation()
+        elif V2 is None and P2 is None and M2 is not None and T2 is not None:
+            V2 = __V_T_M_relation()
+            P2 = __P_M_V_relation()
+        elif V2 is None and M2 is not None and P2 is not None and T2 is not None:
+            V2 = __V_M_P_relation()
+        elif M2 is None and V2 is not None and P2 is not None and T2 is not None:
+            M2 = __M_V_T_relation()
         else:
             raise ValueError(
-                "Adiabatic process can constrain any 2 of Pressure, Volume, Temperature and Mass."
+                f"Invalid Constraints: Pressure = {P2}, Mass = {M2}, Volume = {V2}, Temperature = {T2},"
+                " for the calculation of the final isentropic state. "
+                "There should be only 2 constraints except for a special isentropic case, where, to constrain pressure and temperature, "
+                "there should be one additional constraint on either mass or volume"
             )
 
         return P2, V2, M2, T2
 
-    def __interpolate_process(self):
+    def __traverse_to_final_state_variable(
+        self,
+        state_variable: Literal["pressure", "volume", "mass", "temperature"],
+        process_type: GasProcessType,
+        num_steps: int,
+        gamma_update: Literal["constant", "last", "mean", "mean-global"],
+    ):
         raise NotImplementedError("Process interpolation is not implemented yet.")
 
     @property

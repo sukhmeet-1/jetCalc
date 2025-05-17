@@ -366,7 +366,8 @@ class GasState:
         return self.__gas_mixture
 
     def __str__(self):
-        lines = [self.__gas_mixture.__str__()]
+        #lines = [self.__gas_mixture.__str__()]
+        lines = []
         lines.append(f"\nTHERMODYNAMIC DATA FOR '{self.__gas_mixture.name}':\n")
         lines.append(f"Molar Mass (kg): {self.molar_mass}")
         lines.append(f"Mass (kg): {self.mass}")
