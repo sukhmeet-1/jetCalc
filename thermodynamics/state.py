@@ -201,11 +201,9 @@ class GasState:
         gas_mixture_species: Set[str] = self.__gas_mixture.species
 
         for species in gas_mixture_species:
-            species_data: Dict[str, Any] = (
-                self.__gas_mixture.species_data[species]
-            )
+            species_data: Dict[str, Any] = self.__gas_mixture.species_data[species]
             temp_range: List[float] = species_data["temperature-ranges"]
-            coeff_array: List[List[float]]  = species_data["data"]
+            coeff_array: List[List[float]] = species_data["data"]
             temp_range_len: int = len(temp_range)
 
             if temp_range_len == 3:
@@ -247,11 +245,10 @@ class GasState:
         self.__entropy_SI = entropy_total * R_SI
         self.__cv_SI = self.__cp_SI - R_SI
         self.__gamma = self.__cp_SI / self.__cv_SI
-    
+
     def __recalculate_state(self):
         self.__eqn_of_state()
         self.__calc_thermodynamic_properties()
-        
 
     def update_P_V_T(self, pressure_Pa: float, volume_SI: float, temperature_K: float):
         """Updates Pressure, Volume and Temperature of the state
@@ -366,9 +363,9 @@ class GasState:
         return self.__gas_mixture
 
     def __str__(self):
-        #lines = [self.__gas_mixture.__str__()]
+        # lines = [self.__gas_mixture.__str__()]
         lines = []
-        lines.append(f"\nTHERMODYNAMIC DATA FOR '{self.__gas_mixture.name}':\n")
+        lines.append(f"\nTHERMODYNAMIC STATE OF '{self.__gas_mixture.name}':\n")
         lines.append(f"Molar Mass (kg): {self.molar_mass}")
         lines.append(f"Mass (kg): {self.mass}")
         lines.append(f"Pressure (Pa): {self.pressure}")

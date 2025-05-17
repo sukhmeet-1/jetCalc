@@ -7,7 +7,7 @@ from thermodynamics.process import (
     GasProcess,
     GasProcessConstraint,
     GasProcessType,
-    process_constraint,
+    generate_process_constraints,
 )
 
 with open(NASA_THERMAL_DATA_PATH, "r") as f:
@@ -23,10 +23,15 @@ def main():
     state_1 = GasState(
         gas_mixture=air, mass_kg=3, pressure_Pa=101325, temperature_K=340
     )
-    const = process_constraint(pressure=state_1.pressure * 2, mass=state_1.mass)
+    const: GasProcessConstraint = generate_process_constraints(
+        volume=state_1.volume * 3, mass=state_1.mass * 2
+    )
     process = GasProcess(GasProcessType.ISOTHERMAL, state_1, const)
     print(process.initial_state)
-    print(process.final_state)
+    print(process.final_ideal_state)
+    print(
+        f"Ideal work done in the {process.process_type} process: {process.ideal_work_done}"
+    )
 
 
 if __name__ == "__main__":

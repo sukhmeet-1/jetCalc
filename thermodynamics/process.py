@@ -1,3 +1,4 @@
+import math
 from enum import Enum
 from typing import Optional, TypedDict, Dict, Set, Literal
 from thermodynamics.state import GasState
@@ -17,7 +18,7 @@ class GasProcessConstraint(TypedDict):
     temperature: Optional[float]
 
 
-def process_constraint(
+def generate_process_constraints(
     pressure: Optional[float] = None,
     volume: Optional[float] = None,
     mass: Optional[float] = None,
@@ -50,7 +51,8 @@ class GasProcess:
         self.__process_type: GasProcessType = process_type
 
         self.__initial_state: GasState = initial_state
-        self.__final_state: Optional[GasState] = None
+        self.__final_ideal_state: Optional[GasState] = None
+        self.__ideal_work: Optional[float] = None
         if final_state_constraints is None:
             raise ValueError(
                 "Constraints for the process are required to calculate the final state"
@@ -59,9 +61,22 @@ class GasProcess:
             self.__final_state_constraints: GasProcessConstraint = (
                 final_state_constraints
             )
-            self.__calc_final_ideal_state()
+            self.__validate_constraints(
+                process_type=self.__process_type,
+                process_constraints=self.__final_state_constraints,
+            )
+        self.__final_ideal_state, self.__ideal_work = (
+            self.__calc_differential_ideal_state(
+                process_type=self.__process_type,
+                process_constraints=self.__final_state_constraints,
+                current_state=self.__initial_state,
+                gamma=self.__initial_state.gamma,
+            )
+        )
 
-    def __validate_constraints(self):
+    def __validate_constraints(
+        self, process_type: GasProcessType, process_constraints: GasProcessConstraint
+    ):
         allowed_constraints: Dict[GasProcessType, Set[str]] = {
             GasProcessType.ISOBARIC: {"temperature", "volume", "mass"},
             GasProcessType.ISOCHORIC: {"pressure", "temperature", "mass"},
@@ -70,52 +85,56 @@ class GasProcess:
         }
 
         provided_constraints = {
-            k for k, v in self.__final_state_constraints.items() if v is not None
+            k for k, v in process_constraints.items() if v is not None
         }
-        invalid = provided_constraints - allowed_constraints[self.__process_type]
+        invalid = provided_constraints - allowed_constraints[process_type]
 
         if invalid:
             raise ValueError(
-                f"{self.__process_type.name.capitalize()} process does not allow constraints on: "
+                f"{process_type.name.capitalize()} process does not allow constraints on: "
                 f"{', '.join(invalid)}"
             )
 
-    def __calc_final_ideal_state(self):
-        self.__validate_constraints()
-        P1 = self.__initial_state.pressure
-        V1 = self.__initial_state.volume
-        M1 = self.__initial_state.mass
-        T1 = self.__initial_state.temperature
-        constraint_dict: GasProcessConstraint = self.__final_state_constraints
+    def __calc_differential_ideal_state(
+        self,
+        process_type: GasProcessType,
+        process_constraints: GasProcessConstraint,
+        current_state: GasState,
+        gamma: Optional[float],
+    ):
+        self.__validate_constraints(process_type, process_constraints)
+        P1 = current_state.pressure
+        V1 = current_state.volume
+        M1 = current_state.mass
+        T1 = current_state.temperature
+        constraint_dict: GasProcessConstraint = process_constraints
         P2 = constraint_dict.get("pressure")
         V2 = constraint_dict.get("volume")
         M2 = constraint_dict.get("mass")
         T2 = constraint_dict.get("temperature")
 
-        if self.__process_type == GasProcessType.ISOBARIC:
+        if process_type == GasProcessType.ISOBARIC:
             P2 = P1
-            V2, M2, T2 = self.__isobaric_final_state(V1, M1, T1, V2, M2, T2)
-        elif self.__process_type == GasProcessType.ISOCHORIC:
+            V2, M2, T2, W_P = self.__isobaric_final_state(V1, M1, T1, V2, M2, T2)
+            W = P1 * W_P
+        elif process_type == GasProcessType.ISOCHORIC:
             V2 = V1
-            P2, M2, T2 = self.__isochoric_final_state(P1, M1, T1, P2, M2, T2)
-        elif self.__process_type == GasProcessType.ISOTHERMAL:
+            P2, M2, T2, W = self.__isochoric_final_state(P1, M1, T1, P2, M2, T2)
+        elif process_type == GasProcessType.ISOTHERMAL:
             T2 = T1
-            P2, M2, V2 = self.__isothermal_final_state(P1, M1, V1, P2, M2, V2)
-        elif self.__process_type == GasProcessType.ISENTROPIC:
-            P2, V2, M2, T2 = self.__isentropic_final_state(
-                P1,
-                M1,
-                V1,
-                T1,
-                P2,
-                M2,
-                V2,
-                T2,
+            P2, M2, V2, W_R_T = self.__isothermal_final_state(P1, M1, V1, P2, M2, V2)
+            W = W_R_T * T1 * current_state.R
+        elif process_type == GasProcessType.ISENTROPIC:
+            P2, V2, M2, T2, W_R = self.__isentropic_final_state(
+                P1, M1, V1, T1, P2, M2, V2, T2, gamma
             )
+            W = W_R * current_state.R
         else:
-            raise ValueError(f"{self.__process_type} process type not supported")
+            raise ValueError(f"{process_type} process type not supported")
 
-        self.__final_state = GasState(self.__initial_state.gas_mixture, M2, V2, P2, T2)
+        next_state: GasState = GasState(current_state.gas_mixture, M2, V2, P2, T2)
+
+        return next_state, W
 
     def __isobaric_final_state(
         self,
@@ -152,14 +171,17 @@ class GasProcess:
                 )
             return (M2 / M1) * V1 * (T2 / T1)
 
+        def __W_P_relation():
+            return V2 - V1
+
         if T2 is None:
             T2: float = __T_relation()
         elif M2 is None:
             M2: float = __M_relation()
         elif V2 is None:
             V2: float = __V_relation()
-
-        return V2, M2, T2
+        W_P: Optional[float] = __W_P_relation()
+        return V2, M2, T2, W_P
 
     def __isochoric_final_state(
         self,
@@ -202,8 +224,8 @@ class GasProcess:
             M2: float = __M_relation()
         elif P2 is None:
             P2: float = __P_relation()
-
-        return P2, M2, T2
+        W: float = 0
+        return P2, M2, T2, W
 
     def __isothermal_final_state(
         self,
@@ -240,13 +262,21 @@ class GasProcess:
                 )
             return (V1 / V2) * P1 * (M2 / M1)
 
+        def __W_R_T_relation():
+            if V2 <= 0 or V1 <= 0 or V2 == None or V1 == None:
+                raise ValueError(
+                    f"Work cannot be calculated for an isothermal process with final volume = {V2}, initial volume = {V1}"
+                )
+            return 0.5 * (M1 + M2) * math.log((V2 / V1))
+
         if M2 is None:
             M2: float = __M_relation()
         elif V2 is None:
             V2: float = __V_relation()
         elif P2 is None:
             P2: float = __P_relation()
-        return P2, M2, V2
+        W_R_T: Optional[float] = __W_R_T_relation()
+        return P2, M2, V2, W_R_T
 
     def __isentropic_final_state(
         self,
@@ -258,8 +288,11 @@ class GasProcess:
         M2: Optional[float],
         V2: Optional[float],
         T2: Optional[float],
+        gamma: Optional[float] = None,
     ):
-        y = self.__initial_state.gamma
+        y = gamma
+        if y is None:
+            y = self.__initial_state.gamma
         if y <= 0:
             raise ValueError(
                 f"For an isentropic process, gamma = {y} must be a positive non-zero value"
@@ -317,10 +350,17 @@ class GasProcess:
                 )
             return (T1 / T2) ** (1 / (y - 1)) * (M2 / M1) * V1
 
+        def __W_R_relation():
+            if y == 1 or y == None:
+                raise ValueError(
+                    f"Work cannot be calculated for an isentropic process with gamma = {y}"
+                )
+            return (1 / (1 - y)) * (M2 * T2 - M1 * T1)
+
         if V2 is None and T2 is None and P2 is not None and M2 is not None:
             V2 = __V_M_P_relation()
             T2 = __T_V_M_relation()
-        elif M2 is None and T2 in None and P2 is not None and V2 is not None:
+        elif M2 is None and T2 is None and P2 is not None and V2 is not None:
             M2 = __M_P_V_relation()
             T2 = __T_V_M_relation()
         elif P2 is None and T2 is None and M2 is not None and V2 is not None:
@@ -343,8 +383,8 @@ class GasProcess:
                 "There should be only 2 constraints except for a special isentropic case, where, to constrain pressure and temperature, "
                 "there should be one additional constraint on either mass or volume"
             )
-
-        return P2, V2, M2, T2
+        W_R = __W_R_relation()
+        return P2, V2, M2, T2, W_R
 
     def __traverse_to_final_state_variable(
         self,
@@ -356,9 +396,17 @@ class GasProcess:
         raise NotImplementedError("Process interpolation is not implemented yet.")
 
     @property
+    def process_type(self):
+        return self.__process_type.name
+
+    @property
     def initial_state(self):
         return self.__initial_state
 
     @property
-    def final_state(self):
-        return self.__final_state
+    def final_ideal_state(self):
+        return self.__final_ideal_state
+
+    @property
+    def ideal_work_done(self):
+        return self.__ideal_work
