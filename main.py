@@ -24,7 +24,7 @@ def main():
         gas_mixture=air, mass_kg=3, pressure_Pa=101325, temperature_K=340
     )
     const: GasProcessConstraint = generate_process_constraints(
-        volume=state_1.volume * 3, mass=state_1.mass * 2
+        volume=state_1.volume * 3, mass=state_1.mass * 0.9
     )
     process = GasProcess(GasProcessType.ISOTHERMAL, state_1, const)
     print(process.initial_state)

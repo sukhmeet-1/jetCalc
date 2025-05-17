@@ -53,25 +53,22 @@ class GasProcess:
         self.__initial_state: GasState = initial_state
         self.__final_ideal_state: Optional[GasState] = None
         self.__ideal_work: Optional[float] = None
+
         if final_state_constraints is None:
             raise ValueError(
-                "Constraints for the process are required to calculate the final state"
+                "Constraints for the process are required to calculate the final ideal state"
             )
-        else:
-            self.__final_state_constraints: GasProcessConstraint = (
-                final_state_constraints
-            )
-            self.__validate_constraints(
-                process_type=self.__process_type,
-                process_constraints=self.__final_state_constraints,
-            )
-        self.__final_ideal_state, self.__ideal_work = (
-            self.__calc_differential_ideal_state(
-                process_type=self.__process_type,
-                process_constraints=self.__final_state_constraints,
-                current_state=self.__initial_state,
-                gamma=self.__initial_state.gamma,
-            )
+
+        self.__final_state_constraints: GasProcessConstraint = final_state_constraints
+        self.__validate_constraints(
+            process_type=self.__process_type,
+            process_constraints=self.__final_state_constraints,
+        )
+        self.__final_ideal_state, self.__ideal_work = self.__calc_next_ideal_state(
+            process_type=self.__process_type,
+            process_constraints=self.__final_state_constraints,
+            current_state=self.__initial_state,
+            gamma=self.__initial_state.gamma,
         )
 
     def __validate_constraints(
@@ -95,7 +92,7 @@ class GasProcess:
                 f"{', '.join(invalid)}"
             )
 
-    def __calc_differential_ideal_state(
+    def __calc_next_ideal_state(
         self,
         process_type: GasProcessType,
         process_constraints: GasProcessConstraint,
@@ -224,7 +221,7 @@ class GasProcess:
             M2: float = __M_relation()
         elif P2 is None:
             P2: float = __P_relation()
-        W: float = 0
+        W: float = 0.0
         return P2, M2, T2, W
 
     def __isothermal_final_state(
