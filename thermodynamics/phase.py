@@ -6,19 +6,50 @@ from cache.CONSTANTS import AVOGADRO_NUM as AVOG_N
 class GasMixture:
     def __init__(
         self,
-        name: str,
-        mole_fraction_composition: Dict[str, float],
-        thermo_data_yaml: Dict[str, Any],
-        admissible_mole_frac_error: float = 1e-4,
+        name: str = None,
+        mole_fraction_composition: Dict[str, float] = None,
+        thermo_data_yaml: Dict[str, Any] = None,
+        admissible_mole_frac_error: float = 1e-6,
     ):
-        """Initializes a mixture of gaseous species by reading thermodynamic data from a yaml file.
+        """Initializes a mixture of gaseous species by using external thermodynamic data.
 
         Args:
-            name (str): Name of the mixture
-            mole_fraction_composition (Dict[str, float]): Dictionary of constituent gaseous species and their respective mole fractions
-            thermo_data_yaml (Dict[str, Any]): Thermal data loaded from a yaml file already parsed on the user side
-            admissible_mole_frac_error (float, optional): Maximum error in mole fraction composition (making sure all species mole fractions add up to 1). Defaults to 1e-4.
+            `name` (str): Name of the mixture
+            `mole_fraction_composition` (Dict[str, float]): Dictionary of constituent gaseous species and their respective mole fractions
+            `thermo_data_yaml` (Dict[str, Any]): External thermal data of gaseous species
+            `admissible_mole_frac_error` (float, optional): Maximum error in mole fraction composition (making sure all species mole fractions add up to 1). Defaults to 1e-4.
+        Raises:
+            ValueError: If the gas mixture is not named
+            ValueError: If the mole fraction composition of the mixture is not provided or is empty
+            ValueError: If the constituent species do not have their names capitalized
+            ValueError: If the mole fraction of any of the constituent species is zero or negative
+            ValueError: If the thermal data parsed from a yaml file is not provided
+            ValueError: If the sum of all the mole fractions of the constituent species do not add up to 1 within the admissible error range
+            ValueError: If the parsed yaml data has an invalid structure - 'species', 'thermo', 'temperature-ranges' or 'data' keys are missing
+            ValueError: If the any one of the constituent species is not available in the parsed yaml data
         """
+
+        if name is None:
+            raise ValueError("Name must be provided for the gas mixture")
+
+        if mole_fraction_composition is None or mole_fraction_composition == {}:
+            raise ValueError(
+                "Mole fraction composition of the gas mixture must be provided"
+            )
+
+        for species_names in mole_fraction_composition.keys():
+            if species_names.lower() == species_names:
+                raise ValueError("The species names must be all capitalized")
+
+        for species, mole_fraction in mole_fraction_composition.items():
+            if mole_fraction <= 0:
+                raise ValueError(
+                    f"Mole fraction of the constituent species, {species} is {mole_fraction}. It should be positive and non-zero"
+                )
+
+        if thermo_data_yaml is None:
+            raise ValueError("Parsed yaml thermal data of the species must be provided")
+
         # name of the mixture
         self.__name: str = name
 
@@ -44,8 +75,30 @@ class GasMixture:
             yaml_data (Dict[str, Any]): Thermal data from the yaml file parsed on the user side
 
         Raises:
-            ValueError: If the gas mixture has a constituent species which is either unavailable or is tagged by a different name in the yaml data
+            ValueError: If the parsed yaml data has an invalid structure - 'species', 'thermo', 'temperature-ranges' or 'data' keys are missing
+            ValueError: If the any one of the constituent species is not available in the parsed yaml data
         """
+        if "species" not in yaml_data:
+            raise ValueError(
+                "Provided yaml data has invalid structure. 'species' key missing"
+            )
+
+        if not isinstance(yaml_data["species"], list):
+            raise ValueError("Expected 'species' to be a list of dictionaries")
+
+        for species_data in yaml_data["species"]:
+            if "thermo" not in species_data:
+                raise ValueError(
+                    f"Provided yaml data has invalid structure. 'thermo' key missing"
+                )
+            if "temperature-ranges" not in species_data["thermo"]:
+                raise ValueError(
+                    f"Provided yaml data has invalid structure. 'temperature-ranges' key missing"
+                )
+            if "data" not in species_data["thermo"]:
+                raise ValueError(
+                    f"Provided yaml data has invalid structure. 'data' key, containing coefficients missing"
+                )
         # For checking if the all constituent species are available in the file
         species_map: Dict[str, Any] = {
             str(species["name"]).lower(): species["thermo"]
@@ -73,13 +126,13 @@ class GasMixture:
         """Validates if all the mole fractions of the constituent species add up to 1
 
         Args:
-            admissible_error (float): Maximum allowed error in the difference between the actual sum of mole fractions and 1
+            admissible_error (float): Maximum allowed relative error in the actual sum of mole fractions and 1
 
         Raises:
             ValueError: If the sum of all the mole fractions of the constituent species do not add up to 1 within the admissible error range
         """
         total: float = sum(self.__mole_fraction_composition.values())
-        if not abs(total - 1.0) < admissible_error:
+        if not abs(1 - (1.0 / total)) < admissible_error:
             raise ValueError(
                 f"{self.__name}: Total mole fraction must sum to 1.0. Got: {total}"
             )

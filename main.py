@@ -1,5 +1,5 @@
 import yaml
-from cache.PATHS import NASA_THERMAL_DATA_PATH
+from cache.DIRECTORIES import NASA_THERMAL_DATA_PATH
 from cache.STANDARD_GAS_COMPOSITIONS import STANDARD_AIR_COMPOSITION
 from thermodynamics.phase import GasMixture
 from thermodynamics.state import GasState
@@ -26,7 +26,7 @@ def main():
     const: GasProcessConstraint = generate_process_constraints(
         volume=state_1.volume * 3, mass=state_1.mass * 0.9
     )
-    process = GasProcess(GasProcessType.ISOTHERMAL, state_1, const)
+    process = GasProcess(GasProcessType.ISENTROPIC, state_1, const)
     print(process.initial_state)
     print(process.final_ideal_state)
     print(

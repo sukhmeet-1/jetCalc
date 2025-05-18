@@ -16,7 +16,7 @@ class GasState:
         """GasState is an abstraction of a thermodynamic state of a gas mixture.
         Only 3 of the 4 state variables: Mass, Volume, Pressure, Temperature need to be provided to
         completely define the state.
-        However, if all 4 are provided, they are validated using the equation of state, failing which a ValueError is raised
+        However, if all 4 are provided, they are validated using the equation of state, failing which an is raised
 
         Args:
             gas_mixture (GasMixture): Contains the thermal data of the mixture species
@@ -84,6 +84,20 @@ class GasState:
         Raises:
             ValueError: If out of 4 state variables mass, pressure, volume, temperature, 3 are not provided.
         """
+        if (
+            any(
+                [
+                    self.__pressure_Pa,
+                    self.__volume_SI,
+                    self.__mass_kg,
+                    self.__temperature_K,
+                ]
+            )
+            <= 0
+        ):
+            raise ValueError(
+                "Any one of the state variables cannot be negative or zero"
+            )
         # Pressure is unknown
         if (
             self.__pressure_Pa is None
@@ -137,11 +151,11 @@ class GasState:
                 "From mass, volume, pressure and temperature, atleast 3 must be be provided for a valid calculation of the state"
             )
 
-    def __validate_eqn_of_state(self, admissible_error: float = 1e-6):
+    def __validate_eqn_of_state(self, admissible_error: float = 1e-5):
         """Validate if all the state variables are actually valid
 
         Args:
-            admissible_error (float, optional): Maximum admissible error between the lhs and rhs of equation of state.. Defaults to 1e-6.
+            admissible_error (float, optional): Maximum admissible relative error between the lhs and rhs of equation of state.. Defaults to 1e-6.
 
         Raises:
             ValueError: If state variables, mass, volume, pressure and temperature are not valid
@@ -149,11 +163,14 @@ class GasState:
         difference: Optional[float] = (self.__pressure_Pa * self.__volume_SI) - (
             self.__mass_kg * self.__R_spec * self.__temperature_K
         )
-        validation_criteria: bool = abs(difference) <= admissible_error
+        validation_criteria: bool = (
+            abs((1 - difference) / self.__pressure_Pa * self.__volume_SI)
+            <= admissible_error
+        )
 
         if not validation_criteria:
             raise ValueError(
-                f"State with pressure {self.__pressure_Pa}Pa, volume {self.__volume_SI},mass {self.__mass_kg} and temperature {self.__temperature_K} is not valid thermodynamically. L.H.S Eqn of State - R.H.S of Eqn of state: {abs(difference)}. Validation criteria: {admissible_error}"
+                f"State with pressure {self.__pressure_Pa}Pa, volume {self.__volume_SI},mass {self.__mass_kg} and temperature {self.__temperature_K} is not valid thermodynamically. Relative Error: {abs((1 - difference)/ self.__pressure_Pa * self.__volume_SI)}. Validation criteria: {admissible_error}"
             )
 
     def __thermo_nasa_polynomials(
@@ -308,55 +325,55 @@ class GasState:
 
     @property
     def cp(self) -> float:
-        return self.__cp_SI / self.molar_mass
+        return float(self.__cp_SI / self.molar_mass)
 
     @property
     def cv(self) -> float:
-        return self.__cv_SI / self.molar_mass
+        return float(self.__cv_SI / self.molar_mass)
 
     @property
     def enthalpy(self) -> float:
-        return self.__enthalpy_SI / self.molar_mass
+        return float(self.__enthalpy_SI / self.molar_mass)
 
     @property
     def entropy(self) -> float:
-        return self.__entropy_SI / self.molar_mass
+        return float(self.__entropy_SI / self.molar_mass)
 
     @property
     def gamma(self) -> float:
-        return self.__gamma
+        return float(self.__gamma)
 
     @property
     def molar_mass(self) -> float:
-        return self.__mol_mass_kg
+        return float(self.__mol_mass_kg)
 
     @property
     def pressure(self) -> float:
-        return self.__pressure_Pa
+        return float(self.__pressure_Pa)
 
     @property
     def density(self) -> float:
-        return self.__mass_kg / self.__volume_SI
+        return float(self.__mass_kg / self.__volume_SI)
 
     @property
     def mass(self) -> float:
-        return self.__mass_kg
+        return float(self.__mass_kg)
 
     @property
     def volume(self) -> float:
-        return self.__volume_SI
+        return float(self.__volume_SI)
 
     @property
     def R(self) -> float:
-        return self.__R_spec
+        return float(self.__R_spec)
 
     @property
     def R_uni(self) -> float:
-        return R_SI
+        return float(R_SI)
 
     @property
     def temperature(self) -> float:
-        return self.__temperature_K
+        return float(self.__temperature_K)
 
     @property
     def gas_mixture(self) -> GasMixture:
