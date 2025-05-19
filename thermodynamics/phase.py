@@ -1,4 +1,4 @@
-from typing import Dict, Set, List, Any
+from typing import Dict, Set, List, Any, Optional
 from periodictable.formulas import formula
 from cache.CONSTANTS import AVOGADRO_NUM as AVOG_N
 
@@ -6,18 +6,18 @@ from cache.CONSTANTS import AVOGADRO_NUM as AVOG_N
 class GasMixture:
     def __init__(
         self,
-        name: str = None,
+        name: Optional[str] = None,
         mole_fraction_composition: Dict[str, float] = None,
         thermo_data_yaml: Dict[str, Any] = None,
-        admissible_mole_frac_error: float = 1e-6,
+        admissible_mole_frac_error: float = 1e-4,
     ):
         """Initializes a mixture of gaseous species by using external thermodynamic data.
 
         Args:
-            `name` (str): Name of the mixture
-            `mole_fraction_composition` (Dict[str, float]): Dictionary of constituent gaseous species and their respective mole fractions
-            `thermo_data_yaml` (Dict[str, Any]): External thermal data of gaseous species
-            `admissible_mole_frac_error` (float, optional): Maximum error in mole fraction composition (making sure all species mole fractions add up to 1). Defaults to 1e-4.
+            name (str): Name of the mixture
+            mole_fraction_composition (Dict[str, float]): Dictionary of constituent gaseous species and their respective mole fractions
+            thermo_data_yaml (Dict[str, Any]): External thermal data of gaseous species
+            admissible_mole_frac_error (float, optional): Maximum error in mole fraction composition (making sure all species mole fractions add up to 1). Defaults to 1e-4.
         Raises:
             ValueError: If the gas mixture is not named
             ValueError: If the mole fraction composition of the mixture is not provided or is empty
@@ -146,7 +146,7 @@ class GasMixture:
         return self.__species
 
     @property
-    def name(self) -> str:
+    def mixture_name(self) -> str:
         return self.__name
 
     @property

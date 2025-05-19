@@ -7,24 +7,38 @@ from cache.CONSTANTS import UNIVERSAL_GAS_CONSTANT_SI as R_SI
 class GasState:
     def __init__(
         self,
-        gas_mixture: GasMixture,
-        mass_kg: Optional[float] = None,
-        volume_SI: Optional[float] = None,
+        name: Optional[str] = None,
+        gas_mixture: GasMixture = None,
         pressure_Pa: Optional[float] = None,
+        density_SI: Optional[float] = None,
         temperature_K: Optional[float] = None,
     ):
         """GasState is an abstraction of a thermodynamic state of a gas mixture.
-        Only 3 of the 4 state variables: Mass, Volume, Pressure, Temperature need to be provided to
+        Only 2 of the 3 state variables: Pressure, Density and Temperature need to be provided to
         completely define the state.
-        However, if all 4 are provided, they are validated using the equation of state, failing which an is raised
+        However, if all 3 are provided, they are validated using the equation of state, failing which an error is raised
 
         Args:
+            name (str): Name of the thermodynamic state.
             gas_mixture (GasMixture): Contains the thermal data of the mixture species
-            mass_kg (float, optional): Mass of the gas mixture. Defaults to None.
-            volume_SI (float, optional): Volume of the gas mixture. Defaults to None.
             pressure_Pa (float, optional): Pressure of the gas mixture. Defaults to None.
+            density_SI (float, optional): Density of the gas mixture. Defaults to None.
             temperature_K (float, optional): Temperature of the gas. Defaults to None.
+
+        Raises:
+            ValueError: If name of the state is not provided.
+            ValueError: If out of 3 state variables pressure, density and temperature, 2 are not provided.
+            ValueError: If state variables pressure, density and temperature are not valid.
+            ValueError: If the temperature of the state lies beyond the scope of the temperature ranges in the parsed yaml file.
+            ValueError: If any of the state variables is negative or zero.
         """
+        if name is None:
+            raise ValueError("Name must be provided for the state")
+        if gas_mixture == None:
+            raise ValueError("Gas mixture must be provided for the state")
+
+        self.__name = name
+
         # Gas mixture to be evaluated
         self.__gas_mixture: GasMixture = gas_mixture
 
@@ -32,9 +46,7 @@ class GasState:
         self.__mol_mass_kg: Optional[float] = None
 
         # Mass of the mixture in kg
-        self.__mass_kg: Optional[float] = mass_kg
-
-        self.__volume_SI: Optional[float] = volume_SI
+        self.__density_SI = density_SI
 
         # Gas Pressure
         self.__pressure_Pa: Optional[float] = pressure_Pa
@@ -50,16 +62,16 @@ class GasState:
         self.__eqn_of_state()
 
         # Isobaric molar specific heat
-        self.__cp_SI: Optional[float] = None
+        self.__mol_cp_SI: Optional[float] = None
 
         # Isochoric molar specific heat
-        self.__cv_SI: Optional[float] = None
+        self.__mol_cv_SI: Optional[float] = None
 
         # Molar enthalpy
-        self.__enthalpy_SI: Optional[float] = None
+        self.__mol_enthalpy_SI: Optional[float] = None
 
         # Molar entropy
-        self.__entropy_SI: Optional[float] = None
+        self.__mol_entropy_SI: Optional[float] = None
 
         # Ratio of specific heats
         self.__gamma: Optional[float] = None
@@ -79,76 +91,55 @@ class GasState:
         self.__mol_mass_kg = molar_mass_total
 
     def __eqn_of_state(self):
-        """Equation of state `Pressure * Volume = mass * specific gas constant * temperature`
+        """Equation of state `pressure = density * specific gas constant * temperature`
 
         Raises:
-            ValueError: If out of 4 state variables mass, pressure, volume, temperature, 3 are not provided.
+            ValueError: If out of 3 state variables pressure, density and temperature, 2 are not provided.
+            ValueError: If any of the state variables is negative or zero.
         """
-        if (
-            any(
-                [
-                    self.__pressure_Pa,
-                    self.__volume_SI,
-                    self.__mass_kg,
-                    self.__temperature_K,
-                ]
-            )
-            <= 0
+        if any(
+            x is not None and x <= 0
+            for x in [self.__pressure_Pa, self.__density_SI, self.__temperature_K]
         ):
-            raise ValueError(
-                "Any one of the state variables cannot be negative or zero"
-            )
+            raise ValueError("None of the state variables can be negative or zero")
         # Pressure is unknown
         if (
             self.__pressure_Pa is None
-            and self.__volume_SI is not None
-            and self.__mass_kg is not None
+            and self.__density_SI is not None
             and self.__temperature_K is not None
         ):
             self.__pressure_Pa = (
-                self.__mass_kg * self.__R_spec * self.__temperature_K
-            ) / self.__volume_SI
-        # Volume is unknown
+                self.__density_SI * self.__R_spec * self.__temperature_K
+            )
+        # Density is unknown
         elif (
             self.__pressure_Pa is not None
-            and self.__volume_SI is None
-            and self.__mass_kg is not None
+            and self.__density_SI is None
             and self.__temperature_K is not None
         ):
-            self.__volume_SI = (
-                self.__mass_kg * self.__R_spec * self.__temperature_K
-            ) / self.__pressure_Pa
-
-        # Mass is unknown
-        elif (
-            self.__pressure_Pa is not None
-            and self.__volume_SI is not None
-            and self.__mass_kg is None
-            and self.__temperature_K is not None
-        ):
-            self.__mass_kg = (self.__pressure_Pa * self.__volume_SI) / (
+            self.__density_SI = self.__pressure_Pa / (
                 self.__R_spec * self.__temperature_K
             )
+
         # Temperature is unknown
         elif (
             self.__pressure_Pa is not None
-            and self.__volume_SI is not None
-            and self.__mass_kg is not None
+            and self.__density_SI is not None
             and self.__temperature_K is None
         ):
-            self.__temperature_K = (self.__pressure_Pa * self.__volume_SI) / (
-                self.__R_spec * self.__mass_kg
+            self.__temperature_K = (self.__pressure_Pa) / (
+                self.__R_spec * self.__density_SI
             )
+        # Entire state is provided
         elif (
             self.__pressure_Pa is not None
-            and self.__volume_SI is not None
-            and self.__mass_kg is not None
+            and self.__density_SI is not None
             and self.__temperature_K is not None
         ):
             self.__validate_eqn_of_state()
         else:
             raise ValueError(
-                "From mass, volume, pressure and temperature, atleast 3 must be be provided for a valid calculation of the state"
+                "From pressure, density and temperature, atleast 2 must be be provided for a valid calculation of the state"
             )
 
     def __validate_eqn_of_state(self, admissible_error: float = 1e-5):
@@ -158,19 +149,18 @@ class GasState:
             admissible_error (float, optional): Maximum admissible relative error between the lhs and rhs of equation of state.. Defaults to 1e-6.
 
         Raises:
-            ValueError: If state variables, mass, volume, pressure and temperature are not valid
+            ValueError: If state variables pressure, density and temperature are not valid
         """
-        difference: Optional[float] = (self.__pressure_Pa * self.__volume_SI) - (
-            self.__mass_kg * self.__R_spec * self.__temperature_K
+        difference: Optional[float] = (self.__pressure_Pa) - (
+            self.__density_SI * self.__R_spec * self.__temperature_K
         )
         validation_criteria: bool = (
-            abs((1 - difference) / self.__pressure_Pa * self.__volume_SI)
-            <= admissible_error
+            abs(difference / self.__pressure_Pa) <= admissible_error
         )
 
         if not validation_criteria:
             raise ValueError(
-                f"State with pressure {self.__pressure_Pa}Pa, volume {self.__volume_SI},mass {self.__mass_kg} and temperature {self.__temperature_K} is not valid thermodynamically. Relative Error: {abs((1 - difference)/ self.__pressure_Pa * self.__volume_SI)}. Validation criteria: {admissible_error}"
+                f"State with pressure {self.__pressure_Pa}Pa, density {self.__density_SI} and temperature {self.__temperature_K} is not valid thermodynamically. Relative Error: {abs((difference)/ self.__pressure_Pa)}. Validation criteria: {admissible_error}"
             )
 
     def __thermo_nasa_polynomials(
@@ -234,7 +224,7 @@ class GasState:
 
                 else:
                     raise ValueError(
-                        f"[{species}] T={self.__temperature_K}K not in range ({t_lo}-{t_hi})K"
+                        f"For species {species}: T={self.__temperature_K}K not in range ({t_lo}-{t_hi})K"
                     )
 
             else:
@@ -244,7 +234,7 @@ class GasState:
                     coeffs = coeff_array[0]
                 else:
                     raise ValueError(
-                        f"[{species}] T={self.__temperature_K}K not in range ({t_lo}-{t_hi})K"
+                        f"For species {species}: T={self.__temperature_K}K not in range ({t_lo}-{t_hi})K"
                     )
 
             cp_R, h_RT, s_R = self.__thermo_nasa_polynomials(coeffs)
@@ -257,87 +247,87 @@ class GasState:
             enthalpy_total += enthalpy
             entropy_total += entropy
 
-        self.__cp_SI = cp_total * R_SI
-        self.__enthalpy_SI = enthalpy_total * R_SI * self.__temperature_K
-        self.__entropy_SI = entropy_total * R_SI
-        self.__cv_SI = self.__cp_SI - R_SI
-        self.__gamma = self.__cp_SI / self.__cv_SI
+        self.__mol_cp_SI = cp_total * R_SI
+        self.__mol_enthalpy_SI = enthalpy_total * R_SI * self.__temperature_K
+        self.__mol_entropy_SI = entropy_total * R_SI
+        self.__mol_cv_SI = self.__mol_cp_SI - R_SI
+        self.__gamma = self.__mol_cp_SI / self.__mol_cv_SI
 
-    def __recalculate_state(self):
+    def update_state(
+        self,
+        name: Optional[str] = None,
+        pressure_Pa: Optional[float] = None,
+        density_SI: Optional[float] = None,
+        temperature_K: Optional[float] = None,
+    ):
+        """Updates the state for the two provided state variables.
+
+        Args:
+            name (Optional[str], optional): Updated name. Defaults to existing state name.
+            pressure_Pa (Optional[float], optional): Updated pressure. Defaults to None.
+            density_SI (Optional[float], optional): Updated density. Defaults to None.
+            temperature_K (Optional[float], optional): Updated temperature. Defaults to None.
+
+        Raises:
+            ValueError: If no updates are provided
+            ValueError: If only a single state variable is provided as an update
+        """
+        if name == None:
+            name = self.__name
+        if (
+            pressure_Pa is None and density_SI is None and temperature_K is None
+        ):  # All updates are missing
+            raise ValueError("No inputs provided for state update")
+        elif (
+            (pressure_Pa is None and density_SI is None)
+            or (pressure_Pa is None and temperature_K is None)
+            or (density_SI is None and temperature_K is None)
+        ):  # Only one update is provided
+            raise ValueError(
+                "2 state variables out of the 3: pressure, density and temperature, need to be updated"
+            )
+        self.__name = name
+        self.__pressure_Pa = pressure_Pa
+        self.__density_SI = density_SI
+        self.__temperature_K = temperature_K
         self.__eqn_of_state()
         self.__calc_thermodynamic_properties()
 
-    def update_P_V_T(self, pressure_Pa: float, volume_SI: float, temperature_K: float):
-        """Updates Pressure, Volume and Temperature of the state
-
-        Args:
-            pressure_Pa (float): Pressure in Pascal
-            volume_SI (float): Volume in cubic meters
-            temperature_K (float): Temperature in Kelvin
-        """
-        self.__mass_kg = None
-        self.__pressure_Pa = pressure_Pa
-        self.__volume_SI = volume_SI
-        self.__temperature_K = temperature_K
-        self.__recalculate_state()
-
-    def update_P_m_T(self, pressure_Pa: float, mass_kg: float, temperature_K: float):
-        """Updates Pressure, Mass and Temperature of the state
-
-        Args:
-            pressure_Pa (float): Pressure in Pascal
-            mass_kg (float): Mass of the gas mixture in kilograms
-            temperature_K (float): Temperature in Kelvin
-        """
-        self.__volume_SI = None
-        self.__pressure_Pa = pressure_Pa
-        self.__mass_kg = mass_kg
-        self.__temperature_K = temperature_K
-        self.__recalculate_state()
-
-    def update_V_m_T(self, volume_SI: float, mass_kg: float, temperature_K: float):
-        """Updates Volume, Mass and Temperature of the state
-
-        Args:
-            volume_SI (float): Volume in cubic meters
-            mass_kg (float): Mass of the gas mixture in kilograms
-            temperature_K (float): Temperature in Kelvin
-        """
-        self.__pressure_Pa = None
-        self.__mass_kg = mass_kg
-        self.__volume_SI = volume_SI
-        self.__temperature_K = temperature_K
-        self.__recalculate_state()
-
-    def update_P_V_m(self, pressure_Pa: float, volume_SI: float, mass_kg: float):
-        """Updates Pressure, Volume and Mass of the state
-
-        Args:
-            pressure_Pa (float): Pressure in Pascal
-            volume_SI (float): Volume in cubic meters
-            mass_kg (float): Mass of the gas mixture in kilograms
-        """
-        self.__temperature_K = None
-        self.__pressure_Pa = pressure_Pa
-        self.__volume_SI = volume_SI
-        self.__mass_kg = mass_kg
-        self.__recalculate_state()
+    @property
+    def cp_spec(self) -> float:
+        return float(self.__mol_cp_SI / self.molar_mass)
 
     @property
-    def cp(self) -> float:
-        return float(self.__cp_SI / self.molar_mass)
+    def cp_mol(self) -> float:
+        return float(self.__mol_cp_SI)
 
     @property
-    def cv(self) -> float:
-        return float(self.__cv_SI / self.molar_mass)
+    def cv_spec(self) -> float:
+        return float(self.__mol_cv_SI / self.molar_mass)
 
     @property
-    def enthalpy(self) -> float:
-        return float(self.__enthalpy_SI / self.molar_mass)
+    def cv_mol(self) -> float:
+        return float(self.__mol_cv_SI)
 
     @property
-    def entropy(self) -> float:
-        return float(self.__entropy_SI / self.molar_mass)
+    def enthalpy_spec(self) -> float:
+        return float(self.__mol_enthalpy_SI / self.molar_mass)
+
+    @property
+    def enthalpy_mol(self) -> float:
+        return float(self.__mol_enthalpy_SI)
+
+    @property
+    def state_name(self) -> str:
+        return self.__name
+
+    @property
+    def entropy_spec(self) -> float:
+        return float(self.__mol_entropy_SI / self.molar_mass)
+
+    @property
+    def entropy_mol(self) -> float:
+        return float(self.__mol_entropy_SI)
 
     @property
     def gamma(self) -> float:
@@ -353,22 +343,14 @@ class GasState:
 
     @property
     def density(self) -> float:
-        return float(self.__mass_kg / self.__volume_SI)
+        return float(self.__density_SI)
 
     @property
-    def mass(self) -> float:
-        return float(self.__mass_kg)
-
-    @property
-    def volume(self) -> float:
-        return float(self.__volume_SI)
-
-    @property
-    def R(self) -> float:
+    def R_spec(self) -> float:
         return float(self.__R_spec)
 
     @property
-    def R_uni(self) -> float:
+    def R(self) -> float:
         return float(R_SI)
 
     @property
@@ -382,19 +364,23 @@ class GasState:
     def __str__(self):
         # lines = [self.__gas_mixture.__str__()]
         lines = []
-        lines.append(f"\nTHERMODYNAMIC STATE OF '{self.__gas_mixture.name}':\n")
+        lines.append(
+            f"\nTHERMODYNAMIC DATA OF '{self.__gas_mixture.mixture_name}' AT STATE: {self.state_name}\n"
+        )
         lines.append(f"Molar Mass (kg): {self.molar_mass}")
-        lines.append(f"Mass (kg): {self.mass}")
         lines.append(f"Pressure (Pa): {self.pressure}")
-        lines.append(f"Volume (cub. m): {self.volume}")
         lines.append(f"Density (kg / cub. m): {self.density}")
         lines.append(f"Temperature (K): {self.temperature}")
-        lines.append(f"Universal Gas Constant (J / mol K): {self.R_uni}")
-        lines.append(f"Specific Gas Constant (J / kg K): {self.R}")
-        lines.append(f"Isobaric specific heat  (J / kg K): {self.cp}")
-        lines.append(f"Isochoric specific heat (J / kg K): {self.cv}")
-        lines.append(f"Specific Enthalpy (J / kg): {self.enthalpy}")
-        lines.append(f"Specific Entropy (J / kg K): {self.entropy}")
+        lines.append(f"Universal Gas Constant (J / mol K): {self.R}")
+        lines.append(f"Specific Gas Constant (J / kg K): {self.R_spec}")
+        lines.append(f"Specific Cp (J / kg K): {self.cp_spec}")
+        lines.append(f"Molar Cp (J / mol K): {self.cp_mol}")
+        lines.append(f"Specific Cv (J / kg K): {self.cv_spec}")
+        lines.append(f"Molar Cv (J / mol K): {self.cv_mol}")
+        lines.append(f"Specific Enthalpy (J / kg): {self.enthalpy_spec}")
+        lines.append(f"Molar Enthalpy (J / mol): {self.enthalpy_mol}")
+        lines.append(f"Specific Entropy (J / kg K): {self.entropy_spec}")
+        lines.append(f"Molar Entropy (J / mol K): {self.entropy_mol}")
         lines.append(f"Ratio of specific heats: {self.gamma}")
 
         return "\n".join(lines)
